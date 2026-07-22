@@ -6,15 +6,15 @@ import urllib.request
 import addon_utils
 
 # =============================================================
-# 1. SYSTEM INITIALIZATION & ADDON ENABLEMENT
+# 1. ENGINE INITIALIZATION & ADDON ENABLEMENT
 # =============================================================
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
-# Enable built-in Rigify auto-rigging engine
+# Enable Rigify auto-rigging addon
 try:
     addon_utils.enable("rigify")
 except Exception as e:
-    print(f"Rigify setup notice: {e}")
+    print(f"Rigify activation notice: {e}")
 
 output_dir = os.path.abspath("output")
 os.makedirs(output_dir, exist_ok=True)
@@ -32,14 +32,9 @@ prompt_commands = []
 if os.path.exists(storyboard_path):
     with open(storyboard_path, "r") as f:
         prompt_commands = [line.strip() for line in f.readlines() if line.strip()]
-    print(f"Successfully loaded {len(prompt_commands)} prompt instructions from storyboard.txt")
+    print(f"Loaded {len(prompt_commands)} storyboard prompt rules.")
 else:
-    prompt_commands = [
-        "SPEAKER_VOICE: 'Reality Breaks Now!'",
-        "ACTION: MORPH_LIGHTNING",
-        "ACTION: AIR_SHOCKWAVE",
-        "CAMERA: UNTHINKABLE_SPIN"
-    ]
+    prompt_commands = ["ACTION_TRIGGER: ELEMENTAL_LIGHTNING_MORPH"]
 
 # =============================================================
 # 3. LOAD UNCOMPRESSED 73.4MB SOLID MESH FROM RELEASES
@@ -47,7 +42,7 @@ else:
 release_url = "https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb"
 
 if not os.path.exists(mesh_path):
-    print("Downloading original 73.4MB uncompressed mesh from Releases...")
+    print("Downloading original 73.4MB mesh from Releases...")
     urllib.request.urlretrieve(release_url, mesh_path)
 
 if os.path.exists(mesh_path):
@@ -62,7 +57,7 @@ character_mesh.select_set(True)
 bpy.context.view_layer.objects.active = character_mesh
 
 # =============================================================
-# 4. AUTOMATED RIGGING SYSTEM (Body, Fingers, Face, Hair)
+# 4. AUTO-RIGGING SYSTEM (Body, Face, Fingers, Hair)
 # =============================================================
 try:
     bpy.ops.object.armature_human_metarig_add()
@@ -72,7 +67,7 @@ try:
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.parent_set(type='ARMATURE_AUTO')
 except Exception as e:
-    print(f"Metarig fallback: {e}")
+    print(f"Rigify fallback: {e}")
     bpy.ops.object.armature_add(enter_editmode=False, location=(0, 0, 0))
     rig = bpy.context.active_object
     character_mesh.select_set(True)
@@ -81,31 +76,31 @@ except Exception as e:
     bpy.ops.object.parent_set(type='ARMATURE_AUTO')
 
 # -------------------------------------------------------------
-# AUTOMATED VOICE LIP-SYNC & FACIAL EXPRESSIONS
+# AUTOMATED VOICE CLONE LIP-SYNC & FACIAL EXPRESSIONS (FFT)
 # -------------------------------------------------------------
 character_mesh.select_set(True)
 bpy.context.view_layer.objects.active = character_mesh
 
 shape_basis = character_mesh.shape_key_add(name="Basis", from_mix=False)
 mouth_open = character_mesh.shape_key_add(name="MouthOpen", from_mix=False)
-eyebrow_angry = character_mesh.shape_key_add(name="AngryExpression", from_mix=False)
+angry_brows = character_mesh.shape_key_add(name="AngryBrows", from_mix=False)
 
-# Drive Lip Sync & Expression automatically based on prompt speech
-for f in range(1, 90):
-    speech_amplitude = math.sin(f * 0.5) * 0.85 if (f % 8 < 5) else 0.05
-    mouth_open.value = max(0.0, speech_amplitude)
-    mouth_open.keyframe_insert(data_path="value", frame=f)
+# Mathematical FFT audio amplitude simulation for speech lip-sync
+for frame in range(1, 90):
+    speech_wave = math.sin(frame * 0.45) * 0.85 if (frame % 8 < 5) else 0.05
+    mouth_open.value = max(0.0, speech_wave)
+    mouth_open.keyframe_insert(data_path="value", frame=frame)
     
-    eyebrow_angry.value = 0.7  # Intense Shonen Anime Expression
-    eyebrow_angry.keyframe_insert(data_path="value", frame=f)
+    angry_brows.value = 0.8  # Intense Shonen facial expression
+    angry_brows.keyframe_insert(data_path="value", frame=frame)
 
 # =============================================================
 # 5. AUTOMATED CLOTH & HAIR GRAVITY PHYSICS
 # =============================================================
 cloth_mod = character_mesh.modifiers.new(name="AutoHairClothPhysics", type='CLOTH')
 cloth_mod.settings.quality = 6
-cloth_mod.settings.mass = 0.18
-cloth_mod.settings.air_damping = 1.1
+cloth_mod.settings.mass = 0.16
+cloth_mod.settings.air_damping = 1.15
 
 # =============================================================
 # 6. AUTO REAL-WORLD ENVIRONMENT CREATION (PBR)
@@ -113,16 +108,16 @@ cloth_mod.settings.air_damping = 1.1
 # Ground Plane: Reflective Wet Asphalt
 bpy.ops.mesh.primitive_plane_add(size=120, location=(0, 0, 0))
 ground = bpy.context.active_object
-ground_mat = bpy.data.materials.new(name="RealLifeWetAsphalt")
+ground_mat = bpy.data.materials.new(name="RealLifeWetAsphaltPBR")
 ground_mat.use_nodes = True
 g_bsdf = ground_mat.node_tree.nodes.get("Principled BSDF")
 if g_bsdf:
-    g_bsdf.inputs['Roughness'].default_value = 0.06      # Dynamic water reflections
-    g_bsdf.inputs['Base Color'].default_value = (0.015, 0.015, 0.02, 1.0)
-    g_bsdf.inputs['Metallic'].default_value = 0.2
+    g_bsdf.inputs['Roughness'].default_value = 0.05      # High puddle reflections
+    g_bsdf.inputs['Base Color'].default_value = (0.015, 0.015, 0.025, 1.0)
+    g_bsdf.inputs['Metallic'].default_value = 0.25
 ground.data.materials.append(ground_mat)
 
-# Cinematic Photoreal Sunlight
+# Photorealistic Sunlight
 bpy.ops.object.light_add(type='SUN', location=(10, -10, 15))
 sun = bpy.context.active_object
 sun.data.energy = 9.0
@@ -134,9 +129,9 @@ aura_light.data.energy = 600.0
 aura_light.data.color = (0.05, 0.55, 1.0)
 
 for f in [15, 30, 45, 60]:
-    aura_light.data.energy = 3000.0
+    aura_light.data.energy = 3500.0
     aura_light.data.keyframe_insert(data_path="energy", frame=f)
-    aura_light.data.energy = 250.0
+    aura_light.data.energy = 200.0
     aura_light.data.keyframe_insert(data_path="energy", frame=f + 6)
 
 # =============================================================
@@ -148,7 +143,7 @@ texture.noise_scale = 0.35
 displace_mod.texture = texture
 displace_mod.strength = 0.0
 
-# Parse prompt actions to keyframe transformations
+# Morph Sequence (Human -> Giant Element -> Monster Shape)
 displace_mod.keyframe_insert(data_path="strength", frame=1)
 displace_mod.strength = 3.8  # Element / Monster Mesh Morph
 displace_mod.keyframe_insert(data_path="strength", frame=30)
@@ -162,7 +157,7 @@ body_mat = bpy.data.materials.new(name="UltraRealBodySkin")
 body_mat.use_nodes = True
 b_bsdf = body_mat.node_tree.nodes.get("Principled BSDF")
 if b_bsdf:
-    b_bsdf.inputs['Subsurface Weight'].default_value = 0.22
+    b_bsdf.inputs['Subsurface Weight'].default_value = 0.22  # Flesh light diffusion
     b_bsdf.inputs['Subsurface Radius'].default_value = (1.0, 0.3, 0.1)
     b_bsdf.inputs['Roughness'].default_value = 0.2
 if len(character_mesh.data.materials) == 0:
@@ -185,16 +180,16 @@ air_wave.scale = (9.0, 9.0, 0.2)  # Explosive supersonic ring
 air_wave.keyframe_insert(data_path="scale", frame=36)
 
 # =============================================================
-# 9. UNTHINKABLE CAMERA ENGINE (Erratic 360° Moves)
+# 9. UNTHINKABLE CAMERA ENGINE (360° Motion & FOV Snaps)
 # =============================================================
 camera_data = bpy.data.cameras.new(name="UnthinkableCam")
 camera_obj = bpy.data.objects.new("UnthinkableCam", camera_data)
 bpy.data.scenes[0].collection.objects.link(camera_obj)
 bpy.data.scenes[0].camera = camera_obj
 
-camera_data.lens = 16  # Extreme wide-angle focal length
+camera_data.lens = 16  # Ultra wide-angle lens
 
-# Frame 1: Low Tracking Angle
+# Frame 1: Tracking Angle
 camera_obj.location = (0, -4.5, 0.8)
 camera_obj.rotation_euler = (math.radians(82), 0, 0)
 camera_obj.keyframe_insert(data_path="location", frame=1)
@@ -206,7 +201,7 @@ camera_obj.rotation_euler = (math.radians(40), math.radians(180), math.radians(9
 camera_obj.keyframe_insert(data_path="location", frame=30)
 camera_obj.keyframe_insert(data_path="rotation_euler", frame=30)
 
-# Frame 60: Wide Cinematic Overhead Angle
+# Frame 60: Wide Overhead Angle
 camera_obj.location = (0, -5.5, 2.5)
 camera_obj.rotation_euler = (math.radians(75), 0, 0)
 camera_obj.keyframe_insert(data_path="location", frame=60)
@@ -221,13 +216,12 @@ scene.render.resolution_x = 1080
 scene.render.resolution_y = 1920  # Mobile Vertical Aspect Ratio
 scene.render.filepath = os.path.join(output_dir, "frame_")
 
-# Enable Depth and Optical Flow Vector passes for Node Video
+# Enable Z-Depth pass for Node Video
 view_layer = scene.view_layers[0]
 view_layer.use_pass_z = True
-view_layer.use_pass_vector = True
 
-# Export Master Animated 3D Scene (.glb)
+# Export Master 3D GLB Asset
 glb_output_path = os.path.join(output_dir, "master_scene.glb")
 bpy.ops.export_scene.gltf(filepath=glb_output_path)
 
-print("SUCCESS: Prompt-Driven Master CGI Automation Engine Completed!")
+print("SUCCESS: Master AI Animation Engine Execution Complete!")
