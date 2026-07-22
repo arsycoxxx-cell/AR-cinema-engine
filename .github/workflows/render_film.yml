@@ -2,10 +2,7 @@ name: Headless Anime Render Engine
 
 on:
   push:
-    paths:
-      - 'storyboard.txt'
-      - 'scripts/**'
-      - '.github/workflows/**'
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -19,11 +16,11 @@ jobs:
     - name: Checkout Repository Code
       uses: actions/checkout@v3
 
-    - name: Setup Headless Display & Install AI & 3D Dependencies
+    - name: Setup Virtual Headless Display & Install Blender
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb blender ffmpeg zip python3-pip
-        python3 -m pip install torch torchaudio gTTS librosa scipy
+        sudo apt-get install -y xvfb blender ffmpeg zip
+        mkdir -p ./output
         Xvfb :99 -screen 0 1080x1920x24 &
         export DISPLAY=:99
 
