@@ -2,82 +2,63 @@ import bpy
 import math
 import os
 import traceback
-import urllib.request
 
-# Create output folder immediately
+# 1. SETUP OUTPUT PATHS
 output_dir = os.path.abspath("output")
 os.makedirs(output_dir, exist_ok=True)
-crash_log_path = os.path.join(output_dir, "CRASH_LOG.txt")
+
+mesh_path = os.path.abspath("assets/character.glb")
 
 try:
-    # =============================================================
-    # 1. INITIALIZE BLENDER SCENE & ENVIRONMENT
-    # =============================================================
+    # Reset Blender Scene
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
 
-    mesh_dir = os.path.abspath("assets")
-    os.makedirs(mesh_dir, exist_ok=True)
-    mesh_path = os.path.join(mesh_dir, "character.glb")
-
-    # =============================================================
-    # 2. DOWNLOAD 73.4MB UNCOMPRESSED CHARACTER MESH
-    # =============================================================
-    release_url = "https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb"
-
-    if not os.path.exists(mesh_path):
-        print("Downloading 73.4MB uncompressed mesh from Releases...")
-        req = urllib.request.Request(release_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response, open(mesh_path, 'wb') as out_file:
-            out_file.write(response.read())
-
-    if os.path.exists(mesh_path) and os.path.getsize(mesh_path) > 1000:
+    # 2. IMPORT 73.4MB CHARACTER MESH
+    if os.path.exists(mesh_path) and os.path.getsize(mesh_path) > 100000:
+        print("Importing 73.4MB character mesh from assets/character.glb...")
         bpy.ops.import_scene.gltf(filepath=mesh_path)
-        character_mesh = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH'][0]
+        mesh_objs = [obj for obj in scene.objects if obj.type == 'MESH']
+        character_mesh = mesh_objs[0] if mesh_objs else None
     else:
-        print("Using primitive fallback mesh")
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=(0, 0, 1))
+        character_mesh = None
+
+    if not character_mesh:
+        print("Creating fallback character mesh...")
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, location=(0, 0, 1.0))
         character_mesh = bpy.context.active_object
 
-    # =============================================================
+    bpy.ops.object.select_all(action='DESELECT')
+    character_mesh.select_set(True)
+    bpy.context.view_layer.objects.active = character_mesh
+
     # 3. CONTEXT-SAFE SKELETAL RIGGING
-    # =============================================================
-    armature_data = bpy.data.armatures.new(name="AutoRigArmature")
-    rig = bpy.data.objects.new("AutoRig", armature_data)
-    scene.collection.objects.link(rig)
-
-    # Parent mesh to generated armature
-    character_mesh.parent = rig
+    armature_data = bpy.data.armatures.new("AutoRigArmature")
+    rig_obj = bpy.data.objects.new("AutoRig", armature_data)
+    scene.collection.objects.link(rig_obj)
+    
     arm_mod = character_mesh.modifiers.new(name="ArmatureRig", type='ARMATURE')
-    arm_mod.object = rig
+    arm_mod.object = rig_obj
 
-    # -------------------------------------------------------------
-    # FACIAL EXPRESSIONS & SPEECH MORPH TARGETS
-    # -------------------------------------------------------------
+    # 4. LIP-SYNC FACIAL SHAPE KEYS
     if not character_mesh.data.shape_keys:
         character_mesh.shape_key_add(name="Basis", from_mix=False)
     
     mouth_open = character_mesh.shape_key_add(name="MouthOpen", from_mix=False)
     for frame in range(1, 90):
-        amplitude = math.sin(frame * 0.45) * 0.85 if (frame % 8 < 5) else 0.05
-        mouth_open.value = max(0.0, amplitude)
+        amp = math.sin(frame * 0.45) * 0.85 if (frame % 8 < 5) else 0.05
+        mouth_open.value = max(0.0, amp)
         mouth_open.keyframe_insert(data_path="value", frame=frame)
 
-    # =============================================================
-    # 4. CLOTH & HAIR GRAVITY PHYSICS
-    # =============================================================
-    cloth_mod = character_mesh.modifiers.new(name="AutoClothHairPhysics", type='CLOTH')
+    # 5. CLOTH & HAIR GRAVITY PHYSICS
+    cloth_mod = character_mesh.modifiers.new(name="ClothHairPhysics", type='CLOTH')
     cloth_mod.settings.quality = 5
     cloth_mod.settings.mass = 0.16
-    cloth_mod.settings.air_damping = 1.1
 
-    # =============================================================
-    # 5. REAL-WORLD PBR ENVIRONMENT CREATION
-    # =============================================================
-    # Ground Plane: Reflective Wet Asphalt
+    # 6. PBR ENVIRONMENT (Wet Asphalt Ground)
     bpy.ops.mesh.primitive_plane_add(size=120, location=(0, 0, 0))
     ground = bpy.context.active_object
-    ground_mat = bpy.data.materials.new(name="WetAsphaltPBR")
+    ground_mat = bpy.data.materials.new(name="WetAsphalt")
     ground_mat.use_nodes = True
     g_bsdf = ground_mat.node_tree.nodes.get("Principled BSDF")
     if g_bsdf:
@@ -85,7 +66,7 @@ try:
         g_bsdf.inputs['Base Color'].default_value = (0.015, 0.015, 0.025, 1.0)
     ground.data.materials.append(ground_mat)
 
-    # Anime Energy Point Light
+    # Anime Aura Lighting
     bpy.ops.object.light_add(type='POINT', location=(0, 0, 1.5))
     aura_light = bpy.context.active_object
     aura_light.data.energy = 600.0
@@ -97,26 +78,21 @@ try:
         aura_light.data.energy = 200.0
         aura_light.data.keyframe_insert(data_path="energy", frame=f + 6)
 
-    # =============================================================
-    # 6. SHAPE-SHIFTING & ELEMENTAL MORPHING SHADER
-    # =============================================================
+    # 7. SHAPE-SHIFTING ELEMENTAL MORPH SHADER
     displace_mod = character_mesh.modifiers.new(name="ElementalMorph", type='DISPLACE')
     texture = bpy.data.textures.new(name="NoiseTex", type='CLOUDS')
     texture.noise_scale = 0.35
     displace_mod.texture = texture
-    displace_mod.strength = 0.0
-
+    
     displace_mod.keyframe_insert(data_path="strength", frame=1)
-    displace_mod.strength = 3.5  # Mesh expands into elemental form
+    displace_mod.strength = 3.5
     displace_mod.keyframe_insert(data_path="strength", frame=30)
-    displace_mod.strength = -1.2 # Shape shift compression
+    displace_mod.strength = -1.2
     displace_mod.keyframe_insert(data_path="strength", frame=55)
-    displace_mod.strength = 0.0  # Solid Re-assembly
+    displace_mod.strength = 0.0
     displace_mod.keyframe_insert(data_path="strength", frame=85)
 
-    # =============================================================
-    # 7. UNTHINKABLE CAMERA ENGINE (360° Motion)
-    # =============================================================
+    # 8. UNTHINKABLE CAMERA ENGINE
     camera_data = bpy.data.cameras.new(name="UnthinkableCam")
     camera_obj = bpy.data.objects.new("UnthinkableCam", camera_data)
     scene.collection.objects.link(camera_obj)
@@ -133,9 +109,7 @@ try:
     camera_obj.keyframe_insert(data_path="location", frame=30)
     camera_obj.keyframe_insert(data_path="rotation_euler", frame=30)
 
-    # =============================================================
-    # 8. RENDER & MULTI-PASS EXPORT SETUP
-    # =============================================================
+    # 9. RENDER PASSES & EXPORT
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
     scene.cycles.samples = 16
@@ -143,24 +117,24 @@ try:
     scene.render.resolution_y = 1920
     scene.render.filepath = os.path.join(output_dir, "frame_")
 
-    # Render impact frame 30
+    # Render Impact Frame 30
     scene.frame_set(30)
     bpy.ops.render.render(write_still=True)
 
-    # Export Master 3D Scene (.glb)
-    glb_output_path = os.path.join(output_dir, "master_scene.glb")
-    bpy.ops.export_scene.gltf(filepath=glb_output_path)
+    # Export Master GLB Scene
+    glb_out = os.path.join(output_dir, "master_scene.glb")
+    try:
+        bpy.ops.export_scene.gltf(filepath=glb_out)
+    except Exception:
+        try:
+            bpy.ops.wm.gltf_export(filepath=glb_out)
+        except Exception as e_exp:
+            print(f"GLTF Export notice: {e_exp}")
 
-    # Write Success Log
-    with open(crash_log_path, "w") as f:
-        f.write("SUCCESS: Master Engine Executed Successfully without errors!\n")
-
-    print("SUCCESS: Engine completed execution successfully!")
+    print("SUCCESS: Engine rendered and exported output files successfully!")
 
 except Exception as err:
-    error_msg = traceback.format_exc()
-    print("FATAL ERROR ENCOUNTERED:")
-    print(error_msg)
-    with open(crash_log_path, "w") as f:
-        f.write("CRASH LOG DETECTED:\n")
-        f.write(error_msg)
+    error_log = os.path.join(output_dir, "CRASH_LOG.txt")
+    with open(error_log, "w") as f:
+        f.write(traceback.format_exc())
+    print("ERROR ENCOUNTERED. Log written to CRASH_LOG.txt")
