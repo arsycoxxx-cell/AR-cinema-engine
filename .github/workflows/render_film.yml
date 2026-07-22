@@ -16,15 +16,18 @@ jobs:
     - name: Checkout Repository Code
       uses: actions/checkout@v3
 
-    - name: Setup Virtual Headless Display & Install Blender
+    - name: Setup Virtual Display & Software OpenGL
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb blender ffmpeg zip
+        sudo apt-get install -y xvfb blender ffmpeg zip libgl1-mesa-dri libglx-mesa0
         mkdir -p ./output
         Xvfb :99 -screen 0 1080x1920x24 &
-        export DISPLAY=:99
 
     - name: Execute Cloud Blender Engine
+      env:
+        DISPLAY: ":99"
+        LIBGL_ALWAYS_SOFTWARE: "1"
+        MESA_GL_VERSION_OVERRIDE: "3.3"
       run: |
         blender -b -P scripts/render_pipeline.py
 
