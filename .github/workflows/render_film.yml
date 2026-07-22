@@ -13,42 +13,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository Code
+    - name: Checkout Code
       uses: actions/checkout@v3
 
-    - name: Setup Virtual Display & Prepare Directories
+    - name: Install System Dependencies & Download Asset
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb blender ffmpeg zip curl libgl1-mesa-dri libglx-mesa0
+        sudo apt-get install -y xvfb blender zip curl
         mkdir -p ./output
         mkdir -p ./assets
+        curl -L -o assets/character.glb https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb
         Xvfb :99 -screen 0 1080x1920x24 &
 
-    - name: Download 73.4MB Character Mesh via Curl
-      run: |
-        curl -L -o assets/character.glb https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb
-
-    - name: Execute Cloud Blender Engine
+    - name: Run Blender Render
       env:
         DISPLAY: ":99"
-        LIBGL_ALWAYS_SOFTWARE: "1"
-        MESA_GL_VERSION_OVERRIDE: "3.3"
       run: |
         blender -b -P scripts/render_pipeline.py
 
-    - name: Print Live Debug Console Logs
+    - name: Verify Output Files
       run: |
         ls -la ./output/
-        if [ -f ./output/CRASH_LOG.txt ]; then
-          echo "=== CRASH LOG DETECTED ==="
-          cat ./output/CRASH_LOG.txt
-        fi
 
-    - name: Package Output Assets
+    - name: Package & Publish Zip
       run: |
         zip -r anime_master_pack.zip ./output/
 
-    - name: Push Download to GitHub Releases
+    - name: Push to GitHub Releases
       uses: softprops/action-gh-release@v1
       with:
         files: anime_master_pack.zip
