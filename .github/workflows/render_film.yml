@@ -2,7 +2,10 @@ name: Headless Anime Render Engine
 
 on:
   push:
-    branches: [ main ]
+    paths:
+      - 'storyboard.txt'
+      - 'scripts/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -19,7 +22,8 @@ jobs:
     - name: Setup Virtual Headless Display & Install Blender
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb blender ffmpeg zip
+        sudo apt-get install -y xvfb blender ffmpeg zip python3-pip
+        python3 -m pip install gTTS
         Xvfb :99 -screen 0 1080x1920x24 &
         export DISPLAY=:99
 
