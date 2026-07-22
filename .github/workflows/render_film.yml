@@ -16,12 +16,17 @@ jobs:
     - name: Checkout Repository Code
       uses: actions/checkout@v3
 
-    - name: Setup Virtual Display & Software OpenGL
+    - name: Setup Virtual Display & Prepare Directories
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb blender ffmpeg zip libgl1-mesa-dri libglx-mesa0
+        sudo apt-get install -y xvfb blender ffmpeg zip curl libgl1-mesa-dri libglx-mesa0
         mkdir -p ./output
+        mkdir -p ./assets
         Xvfb :99 -screen 0 1080x1920x24 &
+
+    - name: Download 73.4MB Character Mesh via Curl
+      run: |
+        curl -L -o assets/character.glb https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb
 
     - name: Execute Cloud Blender Engine
       env:
