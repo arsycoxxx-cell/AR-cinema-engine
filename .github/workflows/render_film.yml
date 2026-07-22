@@ -36,6 +36,14 @@ jobs:
       run: |
         blender -b -P scripts/render_pipeline.py
 
+    - name: Print Live Debug Console Logs
+      run: |
+        ls -la ./output/
+        if [ -f ./output/CRASH_LOG.txt ]; then
+          echo "=== CRASH LOG DETECTED ==="
+          cat ./output/CRASH_LOG.txt
+        fi
+
     - name: Package Output Assets
       run: |
         zip -r anime_master_pack.zip ./output/
