@@ -1,1 +1,37 @@
+name: Headless Anime Render Engine
 
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  cloud-render:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository Code
+      uses: actions/checkout@v3
+
+    - name: Setup Virtual Headless Display & Install Blender
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb blender ffmpeg zip
+        Xvfb :99 -screen 0 1080x1920x24 &
+        export DISPLAY=:99
+
+    - name: Execute Cloud Blender Engine
+      run: |
+        blender -b -P scripts/render_pipeline.py
+
+    - name: Package Output Assets
+      run: |
+        zip -r anime_master_pack.zip ./output/
+
+    - name: Push Download to GitHub Releases
+      uses: softprops/action-gh-release@v1
+      with:
+        files: anime_master_pack.zip
+        tag_name: render-build-${{ github.run_number }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
