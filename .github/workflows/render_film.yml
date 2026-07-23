@@ -2,7 +2,10 @@ name: Headless Anime Render Engine
 
 on:
   push:
-    branches: [ main ]
+    paths:
+      - 'storyboard.txt'
+      - 'scripts/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -13,33 +16,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
+    - name: Checkout Repository Code
       uses: actions/checkout@v3
 
-    - name: Install System Dependencies & Download Asset
+    - name: Setup Virtual Display & Prepare Directories
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb blender zip curl
+        sudo apt-get install -y xvfb blender ffmpeg zip curl python3-pip libgl1-mesa-dri libglx-mesa0
+        python3 -m pip install gTTS
         mkdir -p ./output
         mkdir -p ./assets
-        curl -L -o assets/character.glb https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb
         Xvfb :99 -screen 0 1080x1920x24 &
 
-    - name: Run Blender Render
+    - name: Download 73.4MB Character Mesh via Curl
+      run: |
+        curl -L -o assets/character.glb https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb
+
+    - name: Generate AI Voice Speech Audio
+      run: |
+        python3 -c "
+        import os
+        from gtts import gTTS
+        text = 'I will break past the screen and shatter reality itself!'
+        if os.path.exists('storyboard.txt'):
+            with open('storyboard.txt', 'r') as f:
+                for line in f:
+                    if 'DIALOGUE:' in line:
+                        text = line.split('DIALOGUE:')[1].strip().replace('\"', '')
+        tts = gTTS(text=text, lang='en')
+        tts.save('output/voice_audio.mp3')
+        "
+
+    - name: Execute Cloud Blender Engine
       env:
         DISPLAY: ":99"
+        LIBGL_ALWAYS_SOFTWARE: "1"
+        MESA_GL_VERSION_OVERRIDE: "3.3"
       run: |
         blender -b -P scripts/render_pipeline.py
 
-    - name: Verify Output Files
-      run: |
-        ls -la ./output/
-
-    - name: Package & Publish Zip
+    - name: Package Output Assets
       run: |
         zip -r anime_master_pack.zip ./output/
 
-    - name: Push to GitHub Releases
+    - name: Push Download to GitHub Releases
       uses: softprops/action-gh-release@v1
       with:
         files: anime_master_pack.zip
