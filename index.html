@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Cinema Engine - Master WebGL Studio</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #020205; font-family: sans-serif; color: white; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #ui {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 10; display: flex; gap: 10px; background: rgba(0,0,0,0.8);
+            padding: 10px; border-radius: 10px; border: 1px solid #0088ff;
+        }
+        button {
+            background: #0072ff; color: white; border: none; padding: 12px 20px;
+            font-weight: bold; border-radius: 6px; cursor: pointer;
+            box-shadow: 0 0 15px rgba(0,114,255,0.6);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+</head>
+<body>
+
+    <div id="ui">
+        <button onclick="exportGLB()">EXPORT 3D SCENE (.GLB)</button>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script>
+        // 1. SCENE & CAMERA SETUP
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020205, 0.04);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // 2. REAL-LIFE PBR WET ASPHALT GROUND
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({
+            color: 0x080810,
+            roughness: 0.05,
+            metalness: 0.5
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // Dynamic Anime Lighting
+        const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
+        sunLight.position.set(5, 12, 7);
+        scene.add(sunLight);
+
+        const auraLight = new THREE.PointLight(0x00aaff, 12, 25);
+        auraLight.position.set(0, 1.5, 0);
+        scene.add(auraLight);
+
+        // 3. CUSTOM GLSL ELEMENTAL & DAMAGE SHOCKWAVE SHADER
+        const waveGeo = new THREE.RingGeometry(0.1, 3.5, 64);
+        const waveMat = new THREE.ShaderMaterial({
+            uniforms: { uTime: { value: 0.0 } },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                varying vec2 vUv;
+                void main() {
+                    float dist = length(vUv - vec2(0.5));
+                    float wave = sin((dist - uTime * 0.8) * 35.0);
+                    float alpha = smoothstep(0.0, 0.5, wave) * (1.0 - dist * 2.0);
+                    vec3 fireColor = mix(vec3(0.0, 0.5, 1.0), vec3(1.0, 0.2, 0.0), sin(uTime * 5.0) * 0.5 + 0.5);
+                    gl_FragColor = vec4(fireColor, max(0.0, alpha));
+                }
+            `,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+        const shockwave = new THREE.Mesh(waveGeo, waveMat);
+        shockwave.rotation.x = Math.PI / 2;
+        shockwave.position.y = 0.05;
+        scene.add(shockwave);
+
+        // 4. LOAD CHARACTER MESH WITH FALLBACK
+        let characterMesh = null;
+        const loader = new THREE.GLTFLoader();
+        const meshUrl = "https://github.com/arsycoxxx-cell/AR-cinema-engine/releases/download/v1.0/character.glb";
+
+        loader.load(meshUrl, (gltf) => {
+            characterMesh = gltf.scene;
+            scene.add(characterMesh);
+        }, undefined, () => {
+            const geo = new THREE.SphereGeometry(1, 32, 32);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
+            characterMesh = new THREE.Mesh(geo, mat);
+            characterMesh.position.y = 1;
+            scene.add(characterMesh);
+        });
+
+        // 5. ANIMATION & 360° UNTHINKABLE CAMERA LOOP
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            let time = clock.getElapsedTime();
+
+            waveMat.uniforms.uTime.value = time;
+            auraLight.intensity = 6 + Math.sin(time * 12) * 6;
+
+            // Unthinkable Orbital Camera
+            camera.position.x = Math.sin(time * 0.7) * 4.5;
+            camera.position.z = Math.cos(time * 0.7) * 4.5;
+            camera.position.y = 1.2 + Math.sin(time * 1.5) * 0.4;
+            camera.lookAt(0, 1.0, 0);
+
+            // Shape-shifting Elemental Pulse
+            if (characterMesh) {
+                characterMesh.rotation.y = Math.sin(time * 0.4) * 0.3;
+                characterMesh.scale.setScalar(1.0 + Math.sin(time * 2.5) * 0.08);
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // 6. 1-TAP 3D GLB EXPORTER
+        function exportGLB() {
+            const exporter = new THREE.GLTFExporter();
+            exporter.parse(scene, (gltf) => {
+                const output = JSON.stringify(gltf, null, 2);
+                const blob = new Blob([output], { type: 'application/json' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'master_scene.glb';
+                link.click();
+            }, { binary: true });
+        }
+    </script>
+</body>
+</html>
